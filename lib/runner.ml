@@ -111,8 +111,25 @@ let run_script_assertion lang script stdout stderr exit_code =
   in
   (passed, actual)
 
+(* Build evaluation environment for mini-ML assert blocks *)
+let build_eval_env stdout stderr exit_code headers =
+  let base = [
+    ("stdout", Eval_types.VString stdout);
+    ("stderr", Eval_types.VString stderr);
+    ("status", Eval_types.VInt exit_code);
+    ("headers", Eval_types.VHeaders headers);
+  ] in
+  (* Try to parse stdout as JSON and spread top-level keys *)
+  match Yojson.Safe.from_string stdout with
+  | json ->
+    let value = Eval_types.of_yojson json in
+    (match value with
+     | Eval_types.VObject fields -> base @ fields
+     | _ -> base)
+  | exception _ -> base
+
 (* Check one assertion against actual results *)
-let check_assertion stdout stderr exit_code (a : Types.assertion) : Types.assertion_result =
+let check_assertion stdout stderr exit_code headers (a : Types.assertion) : Types.assertion_result =
   match a.kind with
   | Types.Exact ->
     { assertion = a; passed = stdout = a.expected; actual = stdout }
@@ -140,18 +157,37 @@ let check_assertion stdout stderr exit_code (a : Types.assertion) : Types.assert
   | Types.Script lang ->
     let passed, actual = run_script_assertion lang a.expected stdout stderr exit_code in
     { assertion = a; passed; actual }
+  | Types.Expr ->
+    let env = build_eval_env stdout stderr exit_code headers in
+    let result = Eval.run env a.expected in
+    if result.passed then
+      { assertion = a; passed = true; actual = "all assertions passed" }
+    else
+      (* Format failures into a readable string *)
+      let details = List.map (fun (f : Eval.failure) ->
+        match f.detail with
+        | Eval.Comparison { expected; got } ->
+          Printf.sprintf "  %s: expected %s, got %s" f.expr_src expected got
+        | Eval.ShapeMismatch errors ->
+          let mismatches = List.map (fun (e : Eval.shape_error) ->
+            Printf.sprintf "    %s: expected %s, got %s" e.path e.expected e.got
+          ) errors in
+          Printf.sprintf "  %s:\n%s" f.expr_src (String.concat "\n" mismatches)
+      ) result.failures in
+      { assertion = a; passed = false;
+        actual = String.concat "\n" details }
 
 (* Run a single test *)
 let run_test vars (suite_name : string) (file_path : string)
     ~prev_test ~next_test (test : Types.test) : Types.test_result =
   let command_expanded = Variables.substitute vars test.command in
   let t0 = Unix.gettimeofday () in
-  let stdout, stderr, exit_code, _headers = exec_command command_expanded in
+  let stdout, stderr, exit_code, headers = exec_command command_expanded in
   let t1 = Unix.gettimeofday () in
   let duration_ms = int_of_float ((t1 -. t0) *. 1000.0) in
   let assertion_results = List.map (fun a ->
     let a = Types.{ a with expected = Variables.substitute vars a.expected } in
-    check_assertion stdout stderr exit_code a
+    check_assertion stdout stderr exit_code headers a
   ) test.assertions in
   let passed = List.for_all (fun (r : Types.assertion_result) -> r.passed) assertion_results in
   Types.{

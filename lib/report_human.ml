@@ -7,6 +7,7 @@ let assertion_kind_to_string = function
   | Types.Stderr -> "stderr"
   | Types.Contains -> "stdout contains"
   | Types.Script lang -> Printf.sprintf "script (%s)" lang
+  | Types.Expr -> "assert"
 
 let print_results results ~failures_only =
   let failed = List.filter (fun (r : Types.test_result) -> not r.passed) results in

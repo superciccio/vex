@@ -24,6 +24,7 @@ let assertion_kind_to_string = function
   | Types.Stderr -> "stderr"
   | Types.Contains -> "contains"
   | Types.Script lang -> Printf.sprintf "script:%s" lang
+  | Types.Expr -> "expr"
 
 let option_to_json = function
   | None -> "null"

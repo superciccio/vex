@@ -62,7 +62,7 @@ let parse_label line =
          | "expect", Some "stderr" -> Some "expect.stderr"
          | "expect", None -> Some "expect"
          | "assert", Some "script" -> Some "assert.script"
-         | "assert", None -> Some "assert.script"
+         | "assert", None -> Some "assert.expr"
          | _ -> None)
       | _ -> None
     end else None
@@ -105,6 +105,8 @@ let parse_body body =
           Some Types.{ kind = Contains; expected = b.content }
         else if tag = "assert.script" then
           Some Types.{ kind = Script b.fence_lang; expected = b.content }
+        else if tag = "assert.expr" then
+          Some Types.{ kind = Expr; expected = b.content }
         else
           None
       ) blocks in

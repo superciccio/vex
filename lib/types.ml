@@ -7,6 +7,7 @@ type assertion_kind =
   | Stderr      (* expect.stderr: stderr must match exactly *)
   | Contains    (* expect.contains: stdout must contain substring *)
   | Script of string  (* assert script: run code in given language (python, bash, etc.) *)
+  | Expr        (* assert: mini-ML expression block *)
 
 (* A single assertion: what we expect and how to check it *)
 type assertion = {
