@@ -145,8 +145,7 @@ let learn_file (tf : Types.test_file) =
       else begin
         let command = Variables.substitute tf.variables test.command in
         let stdout, _stderr, exit_code, _headers = Runner.exec_command command in
-        let script_lines = generate_script stdout exit_code in
-        let script = String.concat "\n" script_lines in
+        let script = Shape.generate_miniml stdout exit_code in
         Some (test.name, script)
       end
     ) suite.tests
@@ -169,8 +168,8 @@ let learn_file (tf : Types.test_file) =
         (* Check if this was a run block for a test that needs learning *)
         if !just_closed_run && List.mem_assoc !current_test learned_scripts then begin
           let script = List.assoc !current_test learned_scripts in
-          Buffer.add_string output "> **assert** `script`\n";
-          Buffer.add_string output "```python\n";
+          Buffer.add_string output "> **assert**\n";
+          Buffer.add_string output "```ocaml\n";
           Buffer.add_string output script;
           Buffer.add_char output '\n';
           Buffer.add_string output "```\n";
