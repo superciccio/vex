@@ -1,0 +1,139 @@
+(* Shell backend: execute run blocks and check assertions *)
+
+(* Run a shell command, capture stdout, stderr, and exit code *)
+let exec_command command =
+  let stdout_file = Filename.temp_file "vex" "stdout" in
+  let stderr_file = Filename.temp_file "vex" "stderr" in
+  let full_cmd = Printf.sprintf "%s >%s 2>%s"
+    command
+    (Filename.quote stdout_file)
+    (Filename.quote stderr_file)
+  in
+  let exit_code = Sys.command full_cmd in
+  let read_file path =
+    let content = In_channel.with_open_text path In_channel.input_all in
+    Sys.remove path;
+    String.trim content
+  in
+  let stdout = read_file stdout_file in
+  let stderr = read_file stderr_file in
+  (stdout, stderr, exit_code)
+
+(* Run a script assertion: write script to temp file, inject response
+   data as env vars, run with the specified interpreter *)
+let run_script_assertion lang script stdout stderr exit_code =
+  (* Pick interpreter from the fence language *)
+  let interpreter = match lang with
+    | "python" | "python3" -> "python3"
+    | "bash" | "sh" -> "bash"
+    | "node" | "javascript" | "js" -> "node"
+    | "ruby" | "rb" -> "ruby"
+    | other -> other
+  in
+  (* Pick file extension *)
+  let ext = match lang with
+    | "python" | "python3" -> ".py"
+    | "bash" | "sh" -> ".sh"
+    | "node" | "javascript" | "js" -> ".js"
+    | "ruby" | "rb" -> ".rb"
+    | _ -> ".tmp"
+  in
+  let script_file = Filename.temp_file "vex_script" ext in
+  let stderr_file = Filename.temp_file "vex_script" "stderr" in
+  Out_channel.with_open_text script_file (fun oc -> output_string oc script);
+  (* Run with env vars injected *)
+  let cmd = Printf.sprintf "VEX_STDOUT=%s VEX_STDERR=%s VEX_STATUS=%d %s %s 2>%s"
+    (Filename.quote stdout)
+    (Filename.quote stderr)
+    exit_code
+    interpreter
+    (Filename.quote script_file)
+    (Filename.quote stderr_file)
+  in
+  let script_exit = Sys.command cmd in
+  let script_stderr =
+    let content = In_channel.with_open_text stderr_file In_channel.input_all in
+    Sys.remove stderr_file;
+    String.trim content
+  in
+  Sys.remove script_file;
+  (* exit 0 = pass, anything else = fail *)
+  let passed = script_exit = 0 in
+  let actual = if passed then "script passed"
+    else if script_stderr <> "" then script_stderr
+    else Printf.sprintf "script exited with code %d" script_exit
+  in
+  (passed, actual)
+
+(* Check one assertion against actual results *)
+let check_assertion stdout stderr exit_code (a : Types.assertion) : Types.assertion_result =
+  match a.kind with
+  | Types.Exact ->
+    { assertion = a; passed = stdout = a.expected; actual = stdout }
+  | Types.Status ->
+    let expected_code = int_of_string (String.trim a.expected) in
+    { assertion = a; passed = exit_code = expected_code;
+      actual = string_of_int exit_code }
+  | Types.Stderr ->
+    { assertion = a; passed = stderr = a.expected; actual = stderr }
+  | Types.Contains ->
+    let found =
+      let hay = stdout and needle = a.expected in
+      let hlen = String.length hay and nlen = String.length needle in
+      if nlen = 0 then true
+      else if nlen > hlen then false
+      else
+        let found = ref false in
+        for i = 0 to hlen - nlen do
+          if not !found && String.sub hay i nlen = needle then
+            found := true
+        done;
+        !found
+    in
+    { assertion = a; passed = found; actual = stdout }
+  | Types.Script lang ->
+    let passed, actual = run_script_assertion lang a.expected stdout stderr exit_code in
+    { assertion = a; passed; actual }
+
+(* Run a single test *)
+let run_test vars (suite_name : string) (file_path : string)
+    ~prev_test ~next_test (test : Types.test) : Types.test_result =
+  let command_expanded = Variables.substitute vars test.command in
+  let t0 = Unix.gettimeofday () in
+  let stdout, stderr, exit_code = exec_command command_expanded in
+  let t1 = Unix.gettimeofday () in
+  let duration_ms = int_of_float ((t1 -. t0) *. 1000.0) in
+  let assertion_results = List.map (fun a ->
+    let a = Types.{ a with expected = Variables.substitute vars a.expected } in
+    check_assertion stdout stderr exit_code a
+  ) test.assertions in
+  let passed = List.for_all (fun (r : Types.assertion_result) -> r.passed) assertion_results in
+  Types.{
+    test;
+    suite_name;
+    file_path;
+    passed;
+    stdout;
+    stderr;
+    exit_code;
+    duration_ms;
+    assertion_results;
+    command_expanded;
+    variables_used = vars;
+    prev_test;
+    next_test;
+  }
+
+(* Run all tests in a test file *)
+let run_file (tf : Types.test_file) : Types.test_result list =
+  let all_tests = List.concat_map (fun (suite : Types.suite) ->
+    List.map (fun t -> (suite.name, t)) suite.tests
+  ) tf.suites in
+  let arr = Array.of_list all_tests in
+  let len = Array.length arr in
+  List.init len (fun i ->
+    let suite_name, test = arr.(i) in
+    let prev_test = if i > 0 then Some (snd arr.(i - 1)).Types.name else None in
+    let next_test = if i + 1 < len then Some (snd arr.(i + 1)).Types.name else None in
+    run_test tf.variables suite_name tf.path ~prev_test ~next_test test
+  )
