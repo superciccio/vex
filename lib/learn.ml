@@ -144,7 +144,7 @@ let learn_file (tf : Types.test_file) =
       if has_assertions test then None
       else begin
         let command = Variables.substitute tf.variables test.command in
-        let stdout, _stderr, exit_code = Runner.exec_command command in
+        let stdout, _stderr, exit_code, _headers = Runner.exec_command command in
         let script_lines = generate_script stdout exit_code in
         let script = String.concat "\n" script_lines in
         Some (test.name, script)

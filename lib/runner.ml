@@ -1,23 +1,69 @@
 (* Shell backend: execute run blocks and check assertions *)
 
-(* Run a shell command, capture stdout, stderr, and exit code *)
+(* Read and remove a temp file *)
+let read_temp path =
+  let content = In_channel.with_open_text path In_channel.input_all in
+  Sys.remove path;
+  String.trim content
+
+(* Check if a command starts with curl *)
+let is_curl_command cmd =
+  let trimmed = String.trim cmd in
+  String.length trimmed >= 4 && String.sub trimmed 0 4 = "curl"
+
+(* Parse HTTP headers from curl -D output into (name, value) pairs.
+   Header names are lowercased and hyphens replaced with underscores. *)
+let parse_headers raw =
+  let lines = String.split_on_char '\n' raw in
+  List.filter_map (fun line ->
+    let line = String.trim line in
+    (* Skip status line (HTTP/1.1 200 OK) and empty lines *)
+    if line = "" || (String.length line >= 4 && String.sub line 0 4 = "HTTP") then
+      None
+    else
+      match String.index_opt line ':' with
+      | None -> None
+      | Some i ->
+        let name = String.sub line 0 i in
+        let value = String.trim (String.sub line (i + 1) (String.length line - i - 1)) in
+        (* Normalize: Content-Type -> content_type *)
+        let norm = String.lowercase_ascii name in
+        let norm = String.map (fun c -> if c = '-' then '_' else c) norm in
+        Some (norm, value)
+  ) lines
+
+(* Run a shell command, capture stdout, stderr, exit code, and headers.
+   For curl commands, automatically injects -D to capture response headers. *)
 let exec_command command =
   let stdout_file = Filename.temp_file "vex" "stdout" in
   let stderr_file = Filename.temp_file "vex" "stderr" in
+  let header_file = Filename.temp_file "vex" "headers" in
+  (* For curl commands, inject -D <headerfile> to capture headers *)
+  let actual_cmd =
+    if is_curl_command command then
+      (* Insert -D <file> right after "curl" *)
+      let trimmed = String.trim command in
+      "curl -D " ^ Filename.quote header_file ^ " " ^
+      String.sub trimmed 4 (String.length trimmed - 4)
+    else
+      command
+  in
   let full_cmd = Printf.sprintf "%s >%s 2>%s"
-    command
+    actual_cmd
     (Filename.quote stdout_file)
     (Filename.quote stderr_file)
   in
   let exit_code = Sys.command full_cmd in
-  let read_file path =
-    let content = In_channel.with_open_text path In_channel.input_all in
-    Sys.remove path;
-    String.trim content
+  let stdout = read_temp stdout_file in
+  let stderr = read_temp stderr_file in
+  let headers =
+    if Sys.file_exists header_file then begin
+      let raw = read_temp header_file in
+      parse_headers raw
+    end else
+      []
   in
-  let stdout = read_file stdout_file in
-  let stderr = read_file stderr_file in
-  (stdout, stderr, exit_code)
+  (stdout, stderr, exit_code, headers)
 
 (* Run a script assertion: write script to temp file, inject response
    data as env vars, run with the specified interpreter *)
@@ -100,7 +146,7 @@ let run_test vars (suite_name : string) (file_path : string)
     ~prev_test ~next_test (test : Types.test) : Types.test_result =
   let command_expanded = Variables.substitute vars test.command in
   let t0 = Unix.gettimeofday () in
-  let stdout, stderr, exit_code = exec_command command_expanded in
+  let stdout, stderr, exit_code, _headers = exec_command command_expanded in
   let t1 = Unix.gettimeofday () in
   let duration_ms = int_of_float ((t1 -. t0) *. 1000.0) in
   let assertion_results = List.map (fun a ->

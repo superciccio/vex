@@ -123,4 +123,14 @@ let () =
       ) errors
   ) result.failures;
 
+  (* Test 9: header parsing *)
+  let raw_headers = "HTTP/2 200 \r\ncontent-type: application/json\r\nx-request-id: abc-123\r\ncache-control: no-cache\r\n\r\n" in
+  let headers = Vex.Runner.parse_headers raw_headers in
+  let ok = List.length headers = 3
+    && List.assoc "content_type" headers = "application/json"
+    && List.assoc "x_request_id" headers = "abc-123"
+    && List.assoc "cache_control" headers = "no-cache"
+  in
+  Printf.printf "Test 9 (header parsing): passed=%b (%d headers)\n" ok (List.length headers);
+
   Printf.printf "\nDone.\n"
