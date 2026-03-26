@@ -1,0 +1,3 @@
+# Petstore API test configuration
+api_url: https://petstore3.swagger.io/api/v3
+api_key: special-key

@@ -11,7 +11,7 @@ curl -s '{{api_url}}' -H 'Content-Type: application/json' -H 'Accept: applicatio
 ```
 > **assert**
 ```ocaml
-assert (status = 0);
+assert (vex.status = 0);
 assert (data.animes |> length > 0);
 let first = data.animes.[0] in
 assert (first |> matches_shape {

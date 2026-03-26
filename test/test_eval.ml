@@ -1,17 +1,20 @@
 (* Quick smoke test for the mini-ML evaluator *)
 
 let () =
-  let env : Vex.Eval.env = [
+  let vex_obj = Vex.Eval_types.VObject [
     ("status", Vex.Eval_types.VInt 0);
     ("stdout", Vex.Eval_types.VString "{\"data\":{\"animes\":[{\"id\":\"1\",\"name\":\"Test\",\"score\":7.5,\"genres\":[{\"name\":\"Action\",\"kind\":\"genre\"},{\"name\":\"Comedy\",\"kind\":\"genre\"}]}]}}");
     ("stderr", Vex.Eval_types.VString "");
     ("headers", Vex.Eval_types.VHeaders [("content_type", "application/json")]);
+  ] in
+  let env : Vex.Eval.env = [
+    ("vex", vex_obj);
     ("data", Vex.Eval_types.of_yojson (Yojson.Safe.from_string "{\"animes\":[{\"id\":\"1\",\"name\":\"Test\",\"score\":7.5,\"genres\":[{\"name\":\"Action\",\"kind\":\"genre\"},{\"name\":\"Comedy\",\"kind\":\"genre\"}]}]}"));
   ] in
 
   (* Test 1: basic assertions *)
   let result = Vex.Eval.run env {|
-    assert (status = 0);
+    assert (vex.status = 0);
     assert (data.animes.[0].name = "Test");
     assert (data.animes.[0].score > 5.0)
   |} in
@@ -49,7 +52,7 @@ let () =
 
   (* Test 4: intentional failure *)
   let result = Vex.Eval.run env {|
-    assert (status = 1);
+    assert (vex.status = 1);
     assert (data.animes.[0].score > 9.0)
   |} in
   Printf.printf "Test 4 (failures): passed=%b, asserts=%d, failures=%d\n"
@@ -86,7 +89,7 @@ let () =
 
   (* Test 7: headers *)
   let result = Vex.Eval.run env {|
-    assert (headers.content_type |> contains "application/json")
+    assert (vex.headers.content_type |> contains "application/json")
   |} in
   Printf.printf "Test 7 (headers): passed=%b, asserts=%d, failures=%d\n"
     result.passed result.total_asserts (List.length result.failures);
@@ -100,14 +103,15 @@ let () =
   let env8 : Vex.Eval.env =
     let json = Yojson.Safe.from_string json_str in
     let value = Vex.Eval_types.of_yojson json in
+    let vex8 = Vex.Eval_types.VObject [
+      ("status", Vex.Eval_types.VInt 0);
+      ("stdout", Vex.Eval_types.VString json_str);
+      ("stderr", Vex.Eval_types.VString "");
+      ("headers", Vex.Eval_types.VHeaders []);
+    ] in
     match value with
-    | Vex.Eval_types.VObject fields ->
-      [("status", Vex.Eval_types.VInt 0);
-       ("stdout", Vex.Eval_types.VString json_str);
-       ("stderr", Vex.Eval_types.VString "");
-       ("headers", Vex.Eval_types.VHeaders [])]
-      @ fields
-    | _ -> []
+    | Vex.Eval_types.VObject fields -> ("vex", vex8) :: fields
+    | _ -> [("vex", vex8)]
   in
   let result = Vex.Eval.run env8 generated in
   Printf.printf "Test 8 (roundtrip): passed=%b, asserts=%d, failures=%d\n"

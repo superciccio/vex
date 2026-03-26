@@ -180,7 +180,8 @@ let parse_body body =
 
 let parse path =
   let content = In_channel.with_open_text path In_channel.input_all in
-  let (variables, body) = Frontmatter.parse content in
+  let (frontmatter_vars, body) = Frontmatter.parse content in
+  let variables = Config.resolve_vars path frontmatter_vars in
   let suite_pairs = parse_body body in
   let suites = List.map (fun (name, tests) ->
     Types.{ name; tests }

@@ -67,7 +67,7 @@ let generate_miniml stdout exit_code =
   let lines = ref [] in
   let add s = lines := s :: !lines in
 
-  add (Printf.sprintf "assert (status = %d);" exit_code);
+  add (Printf.sprintf "assert (vex.status = %d);" exit_code);
 
   (match Yojson.Safe.from_string stdout with
    | json ->

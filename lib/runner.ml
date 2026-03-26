@@ -111,20 +111,24 @@ let run_script_assertion lang script stdout stderr exit_code =
   in
   (passed, actual)
 
-(* Build evaluation environment for mini-ML assert blocks *)
+(* Build evaluation environment for mini-ML assert blocks.
+   Builtins live under the "vex" namespace to avoid collisions
+   with JSON keys (e.g. a response with "status": "available"). *)
 let build_eval_env stdout stderr exit_code headers =
-  let base = [
+  let vex_obj = Eval_types.VObject [
+    ("status", Eval_types.VInt exit_code);
     ("stdout", Eval_types.VString stdout);
     ("stderr", Eval_types.VString stderr);
-    ("status", Eval_types.VInt exit_code);
     ("headers", Eval_types.VHeaders headers);
   ] in
+  let base = [("vex", vex_obj)] in
   (* Try to parse stdout as JSON and spread top-level keys *)
   match Yojson.Safe.from_string stdout with
   | json ->
     let value = Eval_types.of_yojson json in
     (match value with
      | Eval_types.VObject fields -> base @ fields
+     | Eval_types.VList _ -> ("items", value) :: base
      | _ -> base)
   | exception _ -> base
 

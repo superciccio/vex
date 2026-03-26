@@ -52,7 +52,14 @@ let rec of_yojson = function
   | `Null -> VNull
   | `Bool b -> VBool b
   | `Int n -> VInt n
-  | `Intlit s -> VInt (int_of_string s)
+  | `Intlit s ->
+    (match int_of_string_opt s with
+     | Some n -> VInt n
+     | None ->
+       (* Large integers that don't fit in OCaml int — store as float *)
+       match float_of_string_opt s with
+       | Some f -> VFloat f
+       | None -> VString s)
   | `Float f -> VFloat f
   | `String s -> VString s
   | `List items -> VList (List.map of_yojson items)

@@ -7,7 +7,7 @@ echo '{"name":"vex","version":1,"tags":["test","ocaml"],"meta":{"author":"andrea
 ```
 > **assert**
 ```ocaml
-assert (status = 0);
+assert (vex.status = 0);
 assert (name = "vex");
 assert (version = 1);
 assert (tags |> length = 2);
