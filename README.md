@@ -19,6 +19,22 @@ $ vex run tests/api.test.md --output json
 
 ## Install
 
+### Binary (recommended)
+
+Download from [Releases](https://github.com/superciccio/vex/releases):
+
+```bash
+# Linux (x86_64)
+curl -L -o vex https://github.com/superciccio/vex/releases/latest/download/vex-linux-x86_64
+chmod +x vex
+sudo mv vex /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -L -o vex https://github.com/superciccio/vex/releases/latest/download/vex-macos-arm64
+chmod +x vex
+sudo mv vex /usr/local/bin/
+```
+
 ### From source
 
 Requires OCaml (>= 4.14) and opam:
