@@ -24,15 +24,13 @@ $ vex run tests/api.test.md --output json
 Download from [Releases](https://github.com/superciccio/vex/releases):
 
 ```bash
-# Linux (x86_64)
+# Linux
 curl -L -o vex https://github.com/superciccio/vex/releases/latest/download/vex-linux-x86_64
-chmod +x vex
-sudo mv vex /usr/local/bin/
+chmod +x vex && sudo mv vex /usr/local/bin/
 
 # macOS (Apple Silicon)
 curl -L -o vex https://github.com/superciccio/vex/releases/latest/download/vex-macos-arm64
-chmod +x vex
-sudo mv vex /usr/local/bin/
+chmod +x vex && sudo mv vex /usr/local/bin/
 ```
 
 ### From source
