@@ -117,9 +117,11 @@ let rec check_shape path value shape =
   | SList elem_shape, VList items ->
     if items = [] then []
     else
-      (* Check first element as representative *)
-      let item_path = path ^ ".[0]" in
-      check_shape item_path (List.hd items) elem_shape
+      (* Check all elements, not just the first *)
+      List.concat (List.mapi (fun i item ->
+        let item_path = Printf.sprintf "%s.[%d]" path i in
+        check_shape item_path item elem_shape
+      ) items)
   | SList _, _ ->
     [{ path; expected = "list"; got = type_name value }]
 
@@ -160,10 +162,10 @@ let eval_string_builtin name arg param =
     (* Shell out to grep for regex — avoids re library dependency *)
     let tmp = Filename.temp_file "vex_match" ".txt" in
     Out_channel.with_open_text tmp (fun oc -> output_string oc s);
-    let cmd = Printf.sprintf "grep -qP %s %s" (Filename.quote pattern) (Filename.quote tmp) in
-    let result = Sys.command cmd in
-    Sys.remove tmp;
-    VBool (result = 0)
+    Fun.protect ~finally:(fun () -> if Sys.file_exists tmp then Sys.remove tmp) (fun () ->
+      let cmd = Printf.sprintf "grep -qP %s %s" (Filename.quote pattern) (Filename.quote tmp) in
+      let result = Sys.command cmd in
+      VBool (result = 0))
   | _ -> eval_error (Printf.sprintf "unknown string builtin: %s" name)
 
 (* Main eval function *)
@@ -267,6 +269,12 @@ and value_eq a b =
   | VList a, VList b ->
     List.length a = List.length b &&
     List.for_all2 value_eq a b
+  | VObject a, VObject b ->
+    List.length a = List.length b &&
+    List.for_all2 (fun (k1, v1) (k2, v2) -> k1 = k2 && value_eq v1 v2) a b
+  | VHeaders a, VHeaders b ->
+    List.length a = List.length b &&
+    List.for_all2 (fun (k1, v1) (k2, v2) -> k1 = k2 && v1 = v2) a b
   | _ -> false
 
 and eval_pipe env value rhs =
@@ -397,6 +405,16 @@ and run_stmts env stmts failures_ref asserts_ref =
         let v = eval env lhs in
         match v with
         | VList items ->
+          if items = [] then begin
+            incr asserts_ref;
+            failures_ref := {
+              expr_src = show_expr stmt;
+              detail = Comparison {
+                expected = "non-empty list";
+                got = "empty list (each had nothing to iterate)"
+              };
+            } :: !failures_ref
+          end else
           eval_each_lambda env items param body failures_ref asserts_ref
         | _ ->
           failures_ref := {

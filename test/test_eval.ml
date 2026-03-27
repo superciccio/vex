@@ -137,4 +137,107 @@ let () =
   in
   Printf.printf "Test 9 (header parsing): passed=%b (%d headers)\n" ok (List.length headers);
 
+  (* ── Regression tests for bug fixes ── *)
+
+  (* Test 10: parenthesized comparisons — Bug 1 *)
+  let result = Vex.Eval.run env {|
+    assert (not (vex.status = 1));
+    assert ((data.animes.[0].score > 5.0))
+  |} in
+  Printf.printf "Test 10 (paren comparison): passed=%b, asserts=%d, failures=%d\n"
+    result.passed result.total_asserts (List.length result.failures);
+  List.iter (fun (f : Vex.Eval.failure) ->
+    Printf.printf "  FAIL: %s\n" f.expr_src
+  ) result.failures;
+
+  (* Test 11: negative numbers — Bug 2 *)
+  let result = Vex.Eval.run env {|
+    assert (data.animes.[0].score > -1.0);
+    assert (-5 < 0);
+    assert (-3 <> 3)
+  |} in
+  Printf.printf "Test 11 (negative numbers): passed=%b, asserts=%d, failures=%d\n"
+    result.passed result.total_asserts (List.length result.failures);
+  List.iter (fun (f : Vex.Eval.failure) ->
+    Printf.printf "  FAIL: %s\n" f.expr_src
+  ) result.failures;
+
+  (* Test 12: shape check validates ALL list elements — Bug 3 *)
+  let env12 : Vex.Eval.env =
+    let json = Yojson.Safe.from_string {|{"items":[{"x":1},{"x":"bad"},{"x":3}]}|} in
+    let value = Vex.Eval_types.of_yojson json in
+    match value with
+    | Vex.Eval_types.VObject fields -> fields
+    | _ -> []
+  in
+  let result = Vex.Eval.run env12 {|
+    assert (items |> matches_shape [{ x: int }])
+  |} in
+  Printf.printf "Test 12 (shape all elements): passed=%b (should be false), failures=%d\n"
+    result.passed (List.length result.failures);
+  List.iter (fun (f : Vex.Eval.failure) ->
+    match f.detail with
+    | Vex.Eval.ShapeMismatch errors ->
+      List.iter (fun (e : Vex.Eval.shape_error) ->
+        Printf.printf "  mismatch at %s: expected %s, got %s\n" e.path e.expected e.got
+      ) errors
+    | _ -> ()
+  ) result.failures;
+
+  (* Test 13: VObject equality — Bug 4 *)
+  let env13 : Vex.Eval.env =
+    let json = Yojson.Safe.from_string {|{"a":{"x":1,"y":2},"b":{"x":1,"y":2},"c":{"x":1,"y":3}}|} in
+    let value = Vex.Eval_types.of_yojson json in
+    match value with
+    | Vex.Eval_types.VObject fields -> fields
+    | _ -> []
+  in
+  let result = Vex.Eval.run env13 {|
+    assert (a = b);
+    assert (a <> c)
+  |} in
+  Printf.printf "Test 13 (object equality): passed=%b, asserts=%d, failures=%d\n"
+    result.passed result.total_asserts (List.length result.failures);
+  List.iter (fun (f : Vex.Eval.failure) ->
+    Printf.printf "  FAIL: %s\n" f.expr_src
+  ) result.failures;
+
+  (* Test 14: empty list with each — Bug 5 *)
+  let env14 : Vex.Eval.env =
+    let json = Yojson.Safe.from_string {|{"items":[]}|} in
+    let value = Vex.Eval_types.of_yojson json in
+    match value with
+    | Vex.Eval_types.VObject fields -> fields
+    | _ -> []
+  in
+  let result = Vex.Eval.run env14 {|
+    items |> each (fun x ->
+      assert (x |> is_string)
+    )
+  |} in
+  Printf.printf "Test 14 (empty each): passed=%b (should be false), failures=%d\n"
+    result.passed (List.length result.failures);
+  List.iter (fun (f : Vex.Eval.failure) ->
+    match f.detail with
+    | Vex.Eval.Comparison { expected; got } ->
+      Printf.printf "  %s: expected %s, got %s\n" f.expr_src expected got
+    | _ -> ()
+  ) result.failures;
+
+  (* Test 15: learn mode generates "items" not "stdout" for top-level arrays — Bug 8 *)
+  let array_json = {|[{"id":1},{"id":2}]|} in
+  let generated = Vex.Shape.generate_miniml array_json 0 in
+  let str_contains hay needle =
+    let hlen = String.length hay and nlen = String.length needle in
+    let found = ref false in
+    for i = 0 to hlen - nlen do
+      if not !found && String.sub hay i nlen = needle then found := true
+    done;
+    !found
+  in
+  let has_items = str_contains generated "items" in
+  let has_stdout = str_contains generated "stdout" in
+  Printf.printf "Test 15 (learn array binding): uses 'items'=%b, uses 'stdout'=%b (should be true,false)\n"
+    has_items has_stdout;
+
   Printf.printf "\nDone.\n"

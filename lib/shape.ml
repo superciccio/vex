@@ -102,11 +102,11 @@ let generate_miniml stdout exit_code =
              add (Printf.sprintf "assert (%s |> matches_shape %s);" key shape_src))
         ) top_fields
       | Eval_types.VList items ->
-        (* Top-level array *)
+        (* Top-level array — runner binds this to "items" *)
         let shape = infer value in
         let shape_src = pp_shape "" shape in
         add (Printf.sprintf "(* length: %d *)" (List.length items));
-        add (Printf.sprintf "assert (stdout |> matches_shape %s);" shape_src)
+        add (Printf.sprintf "assert (items |> matches_shape %s);" shape_src)
       | _ ->
         (* Primitive top-level value *)
         add (Printf.sprintf "assert (stdout |> is_string);"))

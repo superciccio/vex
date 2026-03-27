@@ -131,7 +131,8 @@ let parse_body body =
   List.iter (fun line ->
     incr line_num;
     if !in_block then begin
-      if String.length line >= 3 && String.sub line 0 3 = "```" then begin
+      let block_trimmed = String.trim line in
+      if block_trimmed = "```" then begin
         in_block := false;
         let content = Buffer.contents block_buf in
         let content = if content <> "" && content.[String.length content - 1] = '\n'

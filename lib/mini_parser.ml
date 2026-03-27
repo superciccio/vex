@@ -74,7 +74,7 @@ let rec parse_shape ps =
     let fields = parse_shape_fields ps in
     expect ps RBRACE;
     SObject fields
-  | DOT_LBRACKET ->
+  | LBRACKET | DOT_LBRACKET ->
     ignore (advance ps);
     let inner = parse_shape ps in
     expect ps RBRACKET;
@@ -265,7 +265,7 @@ and parse_atom ps =
   | FUN -> parse_lambda ps
   | LPAREN ->
     ignore (advance ps);
-    let e = parse_pipe ps in
+    let e = parse_comparison ps in
     expect ps RPAREN;
     e
   | tok -> error ps (Printf.sprintf "unexpected token: %s" (show_token tok))

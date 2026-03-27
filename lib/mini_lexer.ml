@@ -11,6 +11,7 @@ type token =
   | TRUE | FALSE
   | LET | IN | FUN | ASSERT | NOT
   | DOT
+  | LBRACKET      (* [ — list shape syntax *)
   | DOT_LBRACKET  (* .[ — array index access *)
   | RBRACKET
   | LPAREN | RPAREN
@@ -36,7 +37,7 @@ let show_token = function
   | TRUE -> "TRUE" | FALSE -> "FALSE"
   | LET -> "LET" | IN -> "IN" | FUN -> "FUN"
   | ASSERT -> "ASSERT" | NOT -> "NOT"
-  | DOT -> "DOT" | DOT_LBRACKET -> "DOT_LBRACKET" | RBRACKET -> "RBRACKET"
+  | DOT -> "DOT" | LBRACKET -> "LBRACKET" | DOT_LBRACKET -> "DOT_LBRACKET" | RBRACKET -> "RBRACKET"
   | LPAREN -> "LPAREN" | RPAREN -> "RPAREN"
   | LBRACE -> "LBRACE" | RBRACE -> "RBRACE"
   | COLON -> "COLON" | COMMA -> "COMMA"
@@ -191,7 +192,7 @@ let tokenize src =
             end else begin
               advance (); DOT
             end
-          | '[' -> advance (); DOT_LBRACKET  (* bare [ also works for index *)
+          | '[' -> advance (); LBRACKET
           | ']' -> advance (); RBRACKET
           | '(' -> advance (); LPAREN
           | ')' -> advance (); RPAREN
@@ -225,6 +226,14 @@ let tokenize src =
           | '-' ->
             if !pos + 1 < len && src.[!pos + 1] = '>' then begin
               advance (); advance (); ARROW
+            end else if !pos + 1 < len && is_digit src.[!pos + 1] then begin
+              (* Negative number literal: -123, -3.14 *)
+              advance (); (* skip the minus *)
+              let num_tok = read_number () in
+              (match num_tok with
+               | INT n -> INT (-n)
+               | FLOAT f -> FLOAT (-.f)
+               | _ -> num_tok)
             end else
               error !pos "unexpected character: -"
           | c -> error !pos (Printf.sprintf "unexpected character: %c" c)
