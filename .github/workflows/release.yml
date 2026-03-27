@@ -32,11 +32,13 @@ jobs:
         run: opam install . --deps-only --yes
 
       - name: Build and test
-        run: opam exec -- dune build -p vex @runtest
+        run: |
+          opam exec -- dune build -p vex @runtest
+          opam exec -- dune install --prefix=_dist vex
 
       - name: Package binary
         run: |
-          cp _build/default/bin/main.exe vex-${{ matrix.target }}
+          cp _dist/bin/vex vex-${{ matrix.target }}
           chmod +x vex-${{ matrix.target }}
 
       - name: Upload artifact
