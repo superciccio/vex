@@ -1,3 +1,4 @@
-(executable
+(test
  (name test_eval)
+ (package vex)
  (libraries vex yojson))

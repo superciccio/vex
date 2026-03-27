@@ -31,11 +31,8 @@ jobs:
       - name: Install dependencies
         run: opam install . --deps-only --yes
 
-      - name: Build
-        run: opam exec -- dune build
-
-      - name: Run tests
-        run: opam exec -- dune exec test/test_eval.exe
+      - name: Build and test
+        run: opam exec -- dune build -p vex @runtest
 
       - name: Package binary
         run: |
