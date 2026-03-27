@@ -33,7 +33,8 @@ jobs:
 
       - name: Build and test
         run: |
-          opam exec -- dune build -p vex @runtest
+          opam exec -- dune build -p vex
+          opam exec -- dune runtest -p vex
           opam exec -- dune install --prefix=_dist vex
 
       - name: Package binary
